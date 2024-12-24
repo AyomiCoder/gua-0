@@ -3,3 +3,4 @@ A simple command line interface (CLI) that fetches the recent activity of a GitH
 
 1. Clone this repo
 2. Run  `npx ts-node src/index.ts <Github Username>`
+3. Run  `npx ts-node src/index.ts <Github Username> --filter=PushEvent` to filter by event type
