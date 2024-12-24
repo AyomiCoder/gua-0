@@ -1,0 +1,21 @@
+{
+  "name": "gua-0",
+  "version": "1.0.0",
+  "description": "A simple command line interface (CLI) that fetches the recent activity of a GitHub user and display it in the terminal.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  },
+  "bin": {
+  "github-activity": "./src/index.ts"
+}
+
+}
