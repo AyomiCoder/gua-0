@@ -94,7 +94,7 @@ const displayActivities = (activities: any[], filterType?: string): void => {
             `No recent activity${filterType ? ` for event type "${filterType}"` : ''} found.`
         );
     } else {
-        filteredActivities.slice(0, 5).forEach((activity) => {
+        filteredActivities.slice(0, 20).forEach((activity) => {
             console.log(formatActivity(activity));
         });
     }
