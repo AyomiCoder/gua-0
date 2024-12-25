@@ -15,7 +15,9 @@
     "typescript": "^5.7.2"
   },
   "bin": {
-  "github-activity": "./src/index.ts"
-}
-
+    "github-activity": "./src/index.ts"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1"
+  }
 }

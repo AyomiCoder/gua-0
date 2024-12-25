@@ -3,10 +3,13 @@
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
+import readline from 'readline';
 
-// Constants for cache
+// Constants
 const CACHE_FILE = path.resolve(__dirname, 'cache.json');
 const CACHE_EXPIRATION = 10 * 60 * 1000; // 10 minutes
+const CONFIG_FILE = path.resolve(__dirname, '.ghactivityrc');
+
 
 // Types
 interface GitHubEvent {
@@ -22,6 +25,14 @@ interface UserDetails {
     public_repos: number;
     followers: number;
     following: number;
+}
+
+interface Config {
+    username?: string;
+    limit?: number;
+    exportFormat?: string;
+    fromDate?: string;
+    toDate?: string;
 }
 
 // Utility: Read cache
@@ -153,34 +164,60 @@ const formatActivity = (event: GitHubEvent): string => {
     }
 };
 
+// Utility: Load Config
+const loadConfig = (): Config => {
+    if (fs.existsSync(CONFIG_FILE)) {
+        return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+    }
+    return {};
+};
+
+// Utility: Save Config
+const saveConfig = (config: Config): void => {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+    console.log(`Configuration saved to ${CONFIG_FILE}`);
+};
+
+// Utility: Prompt User Input
+const prompt = (question: string): Promise<string> => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    return new Promise((resolve) => rl.question(question, (answer) => {
+        rl.close();
+        resolve(answer);
+    }));
+};
+
 // Main function
 const main = async (): Promise<void> => {
-    const args = process.argv.slice(2);
-    const username = args[0];
-    const exportFormat = args.find((arg) => arg.startsWith('--export='))?.split('=')[1];
-    const fromDate = args.find((arg) => arg.startsWith('--from='))?.split('=')[1];
-    const toDate = args.find((arg) => arg.startsWith('--to='))?.split('=')[1];
+    let config = loadConfig();
 
-    if (!username) {
-        console.error('Error: Please provide a GitHub username.');
-        process.exit(1);
-    }
+    // Interactive Mode if CLI arguments are missing
+    const username = config.username || (await prompt('Enter GitHub username: '));
+    const limit = config.limit || parseInt((await prompt('Enter the number of events to fetch (default: 30): ')) || '30', 10);
+    const exportFormat = config.exportFormat || (await prompt('Enter export format (json/csv/md): ')) || 'json';
+    const fromDate = config.fromDate || (await prompt('Enter start date (YYYY-MM-DD) or leave blank: '));
+    const toDate = config.toDate || (await prompt('Enter end date (YYYY-MM-DD) or leave blank: '));
+
+    // Update Config
+    config = { username, limit, exportFormat, fromDate, toDate };
+    saveConfig(config);
 
     try {
+        console.log(`Fetching data for "${username}"...`);
         const user = await fetchUserDetails(username);
         displayUserDetails(user);
-    
+
         const activities = await fetchFromAPI(`https://api.github.com/users/${username}/events`);
         const filteredActivities = activities.filter((activity: GitHubEvent) => {
             const createdAt = new Date(activity.created_at).getTime();
             const from = fromDate ? new Date(fromDate).getTime() : null;
             const to = toDate ? new Date(toDate).getTime() : null;
-    
+
             return (!from || createdAt >= from) && (!to || createdAt <= to);
         });
-    
+
         displayActivities(filteredActivities);
-    
+
         if (exportFormat) {
             exportActivities(filteredActivities, exportFormat);
         }
@@ -197,6 +234,6 @@ const main = async (): Promise<void> => {
             console.error('An unknown error occurred.');
         }
     }
-};    
+};
 
 main();

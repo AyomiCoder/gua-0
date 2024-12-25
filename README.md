@@ -27,9 +27,11 @@ A simple command line interface (CLI) that fetches the recent activity of a GitH
 2. You can export activity in two file formats.
     `npx ts-node src/index.ts <Github Username> --export=json`
     `npx ts-node src/index.ts <Github Username> --export=csv`
+    `npx ts-node src/index.ts <Github Username> --export=md`
 3. It now displays structured data and more info about the user.
 4. Customize Number of Events:
     `npx ts-node src/index.ts <Github Username> --limit=10`
 5. Pagination (Fetch Additional Pages):
     `npx ts-node src/index.ts <Github Username> --page=2`
+6. `npx ts-node src/index.ts <Github Username> --from=2024-01-01 --to=2024-12-31`
 
