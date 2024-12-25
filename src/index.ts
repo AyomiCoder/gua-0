@@ -4,10 +4,23 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 
+// Constants for cache
 const CACHE_FILE = path.resolve(__dirname, 'cache.json');
 const CACHE_EXPIRATION = 10 * 60 * 1000; // 10 minutes
 
-// Utility functions for caching
+// Utility function to format timestamps
+const timeAgo = (timestamp: string): string => {
+    const now = new Date();
+    const past = new Date(timestamp);
+    const seconds = Math.floor((now.getTime() - past.getTime()) / 1000);
+
+    if (seconds < 60) return `${seconds} seconds ago`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+    return `${Math.floor(seconds / 86400)} days ago`;
+};
+
+// Utility function for caching
 const readCache = (username: string): any => {
     if (fs.existsSync(CACHE_FILE)) {
         const cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
@@ -28,13 +41,17 @@ const writeCache = (username: string, data: any): void => {
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
 };
 
-// Fetch data with retry logic
-const fetchWithRetry = (
-    url: string,
-    options: any,
+// Fetch data with pagination and retry logic
+const fetchWithPagination = (
+    username: string,
+    page: number = 1,
+    limit: number = 30,
     retries: number = 3,
     delay: number = 5000
-): Promise<string> => {
+): Promise<any[]> => {
+    const url = `https://api.github.com/users/${username}/events/public?page=${page}&per_page=${limit}`;
+    const options = { headers: { 'User-Agent': 'github-activity-cli' } };
+
     return new Promise((resolve, reject) => {
         const attempt = (retriesLeft: number) => {
             https.get(url, options, (res) => {
@@ -44,7 +61,7 @@ const fetchWithRetry = (
                 } else if (res.statusCode === 200) {
                     let data = '';
                     res.on('data', (chunk) => (data += chunk));
-                    res.on('end', () => resolve(data));
+                    res.on('end', () => resolve(JSON.parse(data)));
                 } else {
                     reject(new Error(`Request failed with status code ${res.statusCode}`));
                 }
@@ -55,123 +72,61 @@ const fetchWithRetry = (
     });
 };
 
-// Fetch user details
-const fetchUserDetails = (username: string): Promise<any> => {
-    const url = `https://api.github.com/users/${username}`;
-    const options = { headers: { 'User-Agent': 'github-activity-cli' } };
-    return fetchWithRetry(url, options).then((data) => JSON.parse(data));
-};
-
-// Fetch user activity
-const fetchActivity = (
-    username: string,
-    filterType?: string,
-    sortOption?: string,
-    exportFormat?: string
-): void => {
-    const cachedData = readCache(username);
-    if (cachedData) {
-        console.log('Using cached data...');
-        displayActivities(cachedData, filterType, sortOption, exportFormat);
-        return;
-    }
-
-    const url = `https://api.github.com/users/${username}/events/public`;
-    const options = { headers: { 'User-Agent': 'github-activity-cli' } };
-
-    fetchWithRetry(url, options)
-        .then((data) => {
-            const activities = JSON.parse(data);
-            writeCache(username, activities); // Cache data
-            displayActivities(activities, filterType, sortOption, exportFormat);
-        })
-        .catch((err) => console.error(`Error: ${err.message}`));
-};
-
 // Display activities
 const displayActivities = (
     activities: any[],
-    filterType?: string,
-    sortOption?: string,
-    exportFormat?: string
+    limit: number,
+    page: number
 ): void => {
-    let filteredActivities = filterType
-        ? activities.filter((activity) => activity.type === filterType)
-        : activities;
+    console.log(`\nRecent Activity (Page ${page}):\n`);
+    console.log(`| Event Type           | Repository             | Details                          | Timestamp`);
+    console.log(`|----------------------|------------------------|----------------------------------|----------------`);
 
-    // Sort activities
-    if (sortOption === 'date') {
-        filteredActivities = filteredActivities.sort(
-            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-    } else if (sortOption === 'type') {
-        filteredActivities = filteredActivities.sort((a, b) => a.type.localeCompare(b.type));
-    }
-
-    // Display in table format
-    console.log(`\nRecent Activity:\n`);
-    console.log(`| Event Type           | Repository             | Details`);
-    console.log(`|----------------------|------------------------|------------------------`);
-    filteredActivities.slice(0, 20).forEach((event) => {
-        const eventRow = `| ${event.type.padEnd(20)} | ${event.repo.name.padEnd(22)} | ${formatActivity(event)}`;
-        console.log(eventRow);
+    activities.slice(0, limit).forEach((event) => {
+        const row = `| ${event.type.padEnd(20)} | ${event.repo.name.padEnd(22)} | ${formatActivity(event).padEnd(32)} | ${timeAgo(event.created_at)}`;
+        console.log(row);
     });
-
-    // Export to file if required
-    if (exportFormat === 'json') {
-        fs.writeFileSync('activity.json', JSON.stringify(filteredActivities, null, 2));
-        console.log('\nExported activity to activity.json');
-    } else if (exportFormat === 'csv') {
-        const csvData = filteredActivities
-            .map((event) => `${event.type},${event.repo.name},${formatActivity(event)}`)
-            .join('\n');
-        fs.writeFileSync('activity.csv', csvData);
-        console.log('\nExported activity to activity.csv');
-    }
 };
 
+// Format activity with emojis
 const formatActivity = (event: any): string => {
     switch (event.type) {
         case 'PushEvent':
-            return `🚀 Pushed ${event.payload.commits.length} commits to ${event.repo.name}`;
+            return `🚀 Pushed ${event.payload.commits.length} commits`;
         case 'IssuesEvent':
-            return `🐛 Opened a new issue in ${event.repo.name}`;
+            return `🐛 Opened an issue`;
         case 'WatchEvent':
-            return `⭐ Starred ${event.repo.name}`;
+            return `⭐ Starred`;
         case 'PullRequestEvent':
-            return `🔀 Created a pull request in ${event.repo.name}`;
-        case 'PullRequestReviewEvent':
-            return `📝 Reviewed a pull request in ${event.repo.name}`;
+            return `🔀 Created a pull request`;
         case 'ForkEvent':
-            return `🍴 Forked ${event.repo.name}`;
+            return `🍴 Forked`;
         case 'IssueCommentEvent':
-            return `💬 Commented on an issue in ${event.repo.name}`;
+            return `💬 Commented on an issue`;
         default:
-            return `📌 Performed ${event.type} on ${event.repo.name}`;
+            return `📌 Performed ${event.type}`;
     }
 };
-
 
 // Main function
 const main = async () => {
     const args = process.argv.slice(2);
     const username = args[0];
-    const filterType = args.find((arg) => arg.startsWith('--filter='))?.split('=')[1];
-    const sortOption = args.find((arg) => arg.startsWith('--sort='))?.split('=')[1];
-    const exportFormat = args.find((arg) => arg.startsWith('--export='))?.split('=')[1];
+    const page = parseInt(args.find((arg) => arg.startsWith('--page='))?.split('=')[1] || '1', 10);
+    const limit = parseInt(args.find((arg) => arg.startsWith('--limit='))?.split('=')[1] || '30', 10);
 
     if (!username) {
         console.error('Error: Please provide a GitHub username.');
         process.exit(1);
     }
 
-    const userDetails = await fetchUserDetails(username);
-    console.log(`\nGitHub User Details:\n`);
-    console.log(`Name: ${userDetails.name || 'N/A'}`);
-    console.log(`Bio: ${userDetails.bio || 'N/A'}`);
-    console.log(`Public Repositories: ${userDetails.public_repos || 0}\n`);
-
-    fetchActivity(username, filterType, sortOption, exportFormat);
+    console.log(`Fetching recent activity for "${username}"...`);
+    const activities = await fetchWithPagination(username, page, limit);
+    if (activities.length === 0) {
+        console.log(`No public activity found for "${username}".`);
+    } else {
+        displayActivities(activities, limit, page);
+    }
 };
 
 main();
