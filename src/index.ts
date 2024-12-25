@@ -112,7 +112,7 @@ const displayActivities = (
     console.log(`\nRecent Activity:\n`);
     console.log(`| Event Type           | Repository             | Details`);
     console.log(`|----------------------|------------------------|------------------------`);
-    filteredActivities.slice(0, 5).forEach((event) => {
+    filteredActivities.slice(0, 20).forEach((event) => {
         const eventRow = `| ${event.type.padEnd(20)} | ${event.repo.name.padEnd(22)} | ${formatActivity(event)}`;
         console.log(eventRow);
     });

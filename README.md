@@ -19,3 +19,13 @@ A simple command line interface (CLI) that fetches the recent activity of a GitH
 11. ReleaseEvent - Triggered when a release is published.
 12. PublicEvent - Triggered when a private repository is made public.
 13. MemberEvent - Triggered when a user is added to a repository as a collaborator
+
+# Newly Added Features
+1. You can now sort the activity by date or type
+    `npx ts-node src/index.ts <Github Username> --sort=date`
+   `npx ts-node src/index.ts <Github Username> --sort=type`
+2. You can export activity in two file formats.
+    `npx ts-node src/index.ts <Github Username> --export=json`
+    `npx ts-node src/index.ts <Github Username> --export=csv`
+3. It now displays structured data and more info about the user.
+
