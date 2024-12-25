@@ -7,7 +7,7 @@ import path from 'path';
 const CACHE_FILE = path.resolve(__dirname, 'cache.json');
 const CACHE_EXPIRATION = 10 * 60 * 1000; // 10 minutes
 
-// Read cache from file
+// Utility functions for caching
 const readCache = (username: string): any => {
     if (fs.existsSync(CACHE_FILE)) {
         const cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
@@ -19,7 +19,6 @@ const readCache = (username: string): any => {
     return null;
 };
 
-// Write data to cache
 const writeCache = (username: string, data: any): void => {
     let cache: { [key: string]: { data: any; timestamp: number } } = {};
     if (fs.existsSync(CACHE_FILE)) {
@@ -29,7 +28,7 @@ const writeCache = (username: string, data: any): void => {
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cache, null, 2));
 };
 
-// Retry logic for rate-limiting
+// Fetch data with retry logic
 const fetchWithRetry = (
     url: string,
     options: any,
@@ -56,51 +55,81 @@ const fetchWithRetry = (
     });
 };
 
-// Fetch user activity with caching and retry logic
-const fetchActivity = (username: string, filterType?: string): void => {
+// Fetch user details
+const fetchUserDetails = (username: string): Promise<any> => {
+    const url = `https://api.github.com/users/${username}`;
+    const options = { headers: { 'User-Agent': 'github-activity-cli' } };
+    return fetchWithRetry(url, options).then((data) => JSON.parse(data));
+};
+
+// Fetch user activity
+const fetchActivity = (
+    username: string,
+    filterType?: string,
+    sortOption?: string,
+    exportFormat?: string
+): void => {
     const cachedData = readCache(username);
     if (cachedData) {
         console.log('Using cached data...');
-        displayActivities(cachedData, filterType);
+        displayActivities(cachedData, filterType, sortOption, exportFormat);
         return;
     }
 
     const url = `https://api.github.com/users/${username}/events/public`;
-    const options = {
-        headers: {
-            'User-Agent': 'github-activity-cli',
-        },
-    };
+    const options = { headers: { 'User-Agent': 'github-activity-cli' } };
 
     fetchWithRetry(url, options)
         .then((data) => {
             const activities = JSON.parse(data);
-            writeCache(username, activities); // Save to cache
-            displayActivities(activities, filterType);
+            writeCache(username, activities); // Cache data
+            displayActivities(activities, filterType, sortOption, exportFormat);
         })
-        .catch((err) => {
-            console.error(`Error: ${err.message}`);
-        });
+        .catch((err) => console.error(`Error: ${err.message}`));
 };
 
-// Display activities with optional filtering
-const displayActivities = (activities: any[], filterType?: string): void => {
-    const filteredActivities = filterType
+// Display activities
+const displayActivities = (
+    activities: any[],
+    filterType?: string,
+    sortOption?: string,
+    exportFormat?: string
+): void => {
+    let filteredActivities = filterType
         ? activities.filter((activity) => activity.type === filterType)
         : activities;
 
-    if (filteredActivities.length === 0) {
-        console.log(
-            `No recent activity${filterType ? ` for event type "${filterType}"` : ''} found.`
+    // Sort activities
+    if (sortOption === 'date') {
+        filteredActivities = filteredActivities.sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
-    } else {
-        filteredActivities.slice(0, 20).forEach((activity) => {
-            console.log(formatActivity(activity));
-        });
+    } else if (sortOption === 'type') {
+        filteredActivities = filteredActivities.sort((a, b) => a.type.localeCompare(b.type));
+    }
+
+    // Display in table format
+    console.log(`\nRecent Activity:\n`);
+    console.log(`| Event Type           | Repository             | Details`);
+    console.log(`|----------------------|------------------------|------------------------`);
+    filteredActivities.slice(0, 5).forEach((event) => {
+        const eventRow = `| ${event.type.padEnd(20)} | ${event.repo.name.padEnd(22)} | ${formatActivity(event)}`;
+        console.log(eventRow);
+    });
+
+    // Export to file if required
+    if (exportFormat === 'json') {
+        fs.writeFileSync('activity.json', JSON.stringify(filteredActivities, null, 2));
+        console.log('\nExported activity to activity.json');
+    } else if (exportFormat === 'csv') {
+        const csvData = filteredActivities
+            .map((event) => `${event.type},${event.repo.name},${formatActivity(event)}`)
+            .join('\n');
+        fs.writeFileSync('activity.csv', csvData);
+        console.log('\nExported activity to activity.csv');
     }
 };
 
-// Format activity for display
 const formatActivity = (event: any): string => {
     switch (event.type) {
         case 'PushEvent':
@@ -122,18 +151,27 @@ const formatActivity = (event: any): string => {
     }
 };
 
+
 // Main function
-const main = () => {
+const main = async () => {
     const args = process.argv.slice(2);
     const username = args[0];
     const filterType = args.find((arg) => arg.startsWith('--filter='))?.split('=')[1];
+    const sortOption = args.find((arg) => arg.startsWith('--sort='))?.split('=')[1];
+    const exportFormat = args.find((arg) => arg.startsWith('--export='))?.split('=')[1];
 
     if (!username) {
         console.error('Error: Please provide a GitHub username.');
         process.exit(1);
     }
 
-    fetchActivity(username, filterType);
+    const userDetails = await fetchUserDetails(username);
+    console.log(`\nGitHub User Details:\n`);
+    console.log(`Name: ${userDetails.name || 'N/A'}`);
+    console.log(`Bio: ${userDetails.bio || 'N/A'}`);
+    console.log(`Public Repositories: ${userDetails.public_repos || 0}\n`);
+
+    fetchActivity(username, filterType, sortOption, exportFormat);
 };
 
 main();
