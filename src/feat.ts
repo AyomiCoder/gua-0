@@ -4,12 +4,12 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
+import chalk from 'chalk'; // Theming support
 
 // Constants
 const CACHE_FILE = path.resolve(__dirname, 'cache.json');
 const CACHE_EXPIRATION = 10 * 60 * 1000; // 10 minutes
 const CONFIG_FILE = path.resolve(__dirname, '.ghactivityrc');
-
 
 // Types
 interface GitHubEvent {
@@ -123,12 +123,12 @@ const exportActivities = (activities: GitHubEvent[], format: string): void => {
     }
 
     fs.writeFileSync(filePath, content);
-    console.log(`Activities exported to ${filePath}`);
+    console.log(chalk.green(`Activities exported to ${filePath}`));
 };
 
 // Display user details
 const displayUserDetails = (user: UserDetails): void => {
-    console.log(`\n👤 User Details:`);
+    console.log(chalk.blue(`\n👤 User Details:`));
     console.log(`- Name: ${user.name || 'N/A'}`);
     console.log(`- Bio: ${user.bio || 'N/A'}`);
     console.log(`- Public Repos: ${user.public_repos}`);
@@ -138,7 +138,7 @@ const displayUserDetails = (user: UserDetails): void => {
 
 // Display activities
 const displayActivities = (activities: GitHubEvent[]): void => {
-    console.log(`\nRecent Activity:\n`);
+    console.log(chalk.yellow(`\nRecent Activity:\n`));
     activities.forEach((event) => {
         console.log(`- ${formatActivity(event)} (${timeAgo(event.created_at)})`);
     });
@@ -161,7 +161,7 @@ const formatActivity = (event: GitHubEvent): string => {
             return `💬 Commented on an issue`;
         default:
             return `📌 Performed ${event.type}`;
-    }
+    };
 };
 
 // Utility: Load Config
@@ -175,13 +175,13 @@ const loadConfig = (): Config => {
 // Utility: Save Config
 const saveConfig = (config: Config): void => {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
-    console.log(`Configuration saved to ${CONFIG_FILE}`);
+    console.log(chalk.green(`Configuration saved to ${CONFIG_FILE}`));
 };
 
 // Utility: Prompt User Input
 const prompt = (question: string): Promise<string> => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise((resolve) => rl.question(question, (answer) => {
+    return new Promise((resolve) => rl.question(chalk.cyan(question), (answer) => {
         rl.close();
         resolve(answer);
     }));
@@ -203,7 +203,7 @@ const main = async (): Promise<void> => {
     saveConfig(config);
 
     try {
-        console.log(`Fetching data for "${username}"...`);
+        console.log(chalk.cyan(`Fetching data for "${username}"...`));
         const user = await fetchUserDetails(username);
         displayUserDetails(user);
 
@@ -224,14 +224,14 @@ const main = async (): Promise<void> => {
     } catch (error) {
         if (error instanceof Error) {
             if (error.message.includes('404')) {
-                console.error(`Error: The username "${username}" does not exist on GitHub.`);
+                console.error(chalk.red(`Error: The username "${username}" does not exist on GitHub.`));
             } else if (error.message.includes('ENOTFOUND')) {
-                console.error('Error: Unable to connect to GitHub. Please check your internet connection.');
+                console.error(chalk.red('Error: Unable to connect to GitHub. Please check your internet connection.'));
             } else {
-                console.error('Error:', error.message);
+                console.error(chalk.red('Error:'), error.message);
             }
         } else {
-            console.error('An unknown error occurred.');
+            console.error(chalk.red('An unknown error occurred.'));
         }
     }
 };
